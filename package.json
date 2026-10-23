@@ -1,0 +1,40 @@
+{
+  "name": "privacy",
+  "version": "2.1.0",
+  "description": "Privacy - WhatsApp Web em uma janela desktop personalizável e leve",
+  "author": "WillSPACCE",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64",
+    "build": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.privacy.whatsapp",
+    "productName": "Privacy",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ],
+      "signAndEditExecutable": false,
+      "artifactName": "Privacy-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Privacy-Portable-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": true,
+      "artifactName": "Privacy-Setup-${version}.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "latest",
+    "electron-builder": "latest"
+  }
+}
