@@ -33,11 +33,12 @@ npm install
 npm run dist
 ```
 
-O instalador será gerado na pasta `dist`.
+O executável portátil será gerado em `dist/win-unpacked/Privacy.exe`.
 
 ### Opção rápida para uso
 
-- Clique no arquivo `.exe` gerado pelo processo de build.
+- Clique no arquivo `start-privacy.bat` na raiz do projeto para abrir em um clique.
+- Ou abra diretamente `dist/win-unpacked/Privacy.exe`.
 - O app abrirá diretamente o WhatsApp Web em uma janela própria.
 
 ## Estrutura principal
