@@ -1,40 +1,64 @@
 {
-  "name": "privacy",
-  "version": "2.1.0",
-  "description": "Privacy - WhatsApp Web em uma janela desktop personalizável e leve",
+  "name": "whatsapp-eletron",
+  "version": "2.3.0",
+  "description": "WhatsApp Eletron — aplicativo desktop para WhatsApp Web com janela personalizável e ajustes visuais",
   "author": "WillSPACCE",
+  "homepage": "https://github.com/WillyanMartinss/Whatsapp-Eletron",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WillyanMartinss/Whatsapp-Eletron.git"
+  },
+  "bugs": {
+    "url": "https://github.com/WillyanMartinss/Whatsapp-Eletron/issues"
+  },
+  "license": "MIT",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win --x64",
-    "build": "electron-builder --win --x64"
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "dist": "npm run build",
+    "build": "npm run build:portable && npm run build:installer",
+    "build:portable": "npm run clean && electron-builder --win portable --x64",
+    "build:installer": "npm run clean && electron-builder --win nsis --x64",
+    "postbuild": "node scripts/postbuild.js",
+    "release": "electron-builder --win --x64 --publish always"
   },
   "build": {
-    "appId": "com.privacy.whatsapp",
-    "productName": "Privacy",
+    "appId": "com.whatsapp.eletron",
+    "productName": "whatsapp-eletron",
     "directories": {
       "output": "dist"
     },
+    "icon": "build/icon.ico",
     "win": {
       "target": [
         "portable",
         "nsis"
       ],
-      "signAndEditExecutable": false,
-      "artifactName": "Privacy-${version}.${ext}"
+      "icon": "build/icon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "signExecutable": false,
+      "artifactName": "whatsapp-eletron-${version}.${ext}"
     },
     "portable": {
-      "artifactName": "Privacy-Portable-${version}.exe"
+      "artifactName": "whatsapp-eletron-portable-${version}.exe"
     },
     "nsis": {
       "oneClick": true,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "artifactName": "whatsapp-eletron-installer-${version}.exe",
       "deleteAppDataOnUninstall": true,
-      "artifactName": "Privacy-Setup-${version}.exe"
+      "shortcutName": "WhatsApp Eletron"
     }
   },
   "devDependencies": {
     "electron": "latest",
-    "electron-builder": "latest"
+    "electron-builder": "latest",
+    "rcedit": "^5.0.2"
   }
 }

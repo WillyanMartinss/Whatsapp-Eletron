@@ -13,6 +13,15 @@ if (!app.requestSingleInstanceLock()) app.quit();
 
 // ---------- Configurações salvas ----------
 const OPACITY_LEVELS = [1, 0.85, 0.7, 0.55, 0.4, 0.25];
+const ZOOM_BASE = { width: 980, height: 760, min: 0.78, max: 1.2 };
+const WINDOW_PRESETS = {
+  mobile: { label: 'Mobile', width: 390, height: 844 },
+  tablet: { label: 'Tablet', width: 768, height: 1024 },
+  small: { label: 'Pequena', width: 360, height: 640 },
+  medium: { label: 'Média', width: 520, height: 820 },
+  desktop: { label: 'Desktop', width: 980, height: 760 },
+  large: { label: 'Grande', width: 1200, height: 860 },
+};
 const DEFAULTS = {
   opacity: 0.7,
   alwaysOnTop: false,
@@ -20,7 +29,10 @@ const DEFAULTS = {
   sidebarHidden: false,
   navHidden: false,
   wallpaper: '',
-  bounds: { width: 420, height: 800 },
+  zoomLevel: 0,
+  neonMode: false,
+  windowPreset: 'desktop',
+  bounds: { width: 980, height: 760 },
 };
 const settingsFile = path.join(app.getPath('userData'), 'settings.json');
 
@@ -41,9 +53,26 @@ function setOpacity(value) {
   win.setOpacity(value);
   saveSettings();
 }
+function getZoomValue() {
+  return Math.round((Math.pow(1.12, settings.zoomLevel || 0) * 100));
+}
+function getZoomLabel() {
+  return `${getZoomValue()}%`;
+}
+function updateZoomBadge() {
+  if (!win || !win.webContents) return;
+  win.webContents.executeJavaScript(`window.__waZoomIndicator && window.__waZoomIndicator.update(${getZoomValue()})`).catch(() => {});
+}
 function cycleOpacity() {
   const i = OPACITY_LEVELS.findIndex((v) => Math.abs(v - settings.opacity) < 0.01);
   setOpacity(OPACITY_LEVELS[(i + 1) % OPACITY_LEVELS.length]);
+}
+function adjustOpacityByWheel(deltaY) {
+  const currentIndex = OPACITY_LEVELS.findIndex((v) => Math.abs(v - settings.opacity) < 0.01);
+  const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+  const direction = deltaY < 0 ? 1 : -1;
+  const nextIndex = Math.min(OPACITY_LEVELS.length - 1, Math.max(0, safeIndex + direction));
+  setOpacity(OPACITY_LEVELS[nextIndex]);
 }
 function setAlwaysOnTop(value) {
   settings.alwaysOnTop = value;
@@ -79,6 +108,54 @@ function setWallpaper(pathValue) {
     .executeJavaScript(`window.__waWallpaper && window.__waWallpaper.set(${JSON.stringify(pathValue || '')})`)
     .catch(() => {});
 }
+function getAutoFitZoomFactor() {
+  if (!win || !win.getBounds) return 1;
+  const { width, height } = win.getBounds();
+  const proportionalWidth = width / ZOOM_BASE.width;
+  const proportionalHeight = height / ZOOM_BASE.height;
+  const ratio = Math.min(proportionalWidth, proportionalHeight, 1.2);
+  return Math.min(ZOOM_BASE.max, Math.max(ZOOM_BASE.min, ratio));
+}
+function applyZoom() {
+  if (!win || !win.webContents) return;
+  const autoFit = getAutoFitZoomFactor();
+  const manualFactor = Math.pow(1.12, settings.zoomLevel || 0);
+  const finalFactor = Math.min(1.6, Math.max(0.68, autoFit * manualFactor));
+  win.webContents.setZoomFactor(finalFactor);
+}
+function setZoomLevel(level) {
+  settings.zoomLevel = Number(level) || 0;
+  if (win && win.webContents) {
+    applyZoom();
+    updateZoomBadge();
+  }
+  saveSettings();
+}
+function zoomIn() {
+  setZoomLevel(Math.min(5, settings.zoomLevel + 1));
+}
+function zoomOut() {
+  setZoomLevel(Math.max(-5, settings.zoomLevel - 1));
+}
+function resetZoom() {
+  setZoomLevel(0);
+}
+function applyWindowPreset(name) {
+  const preset = WINDOW_PRESETS[name];
+  if (!preset || !win) return;
+  settings.windowPreset = name;
+  win.setSize(preset.width, preset.height);
+  win.center();
+  settings.bounds = win.getBounds();
+  saveSettings();
+}
+function setNeonMode(value) {
+  settings.neonMode = !!value;
+  saveSettings();
+  if (win && win.webContents) {
+    win.webContents.executeJavaScript(`window.__waTheme && window.__waTheme.setNeon(${settings.neonMode})`).catch(() => {});
+  }
+}
 function chooseWallpaper() {
   const result = dialog.showOpenDialogSync({
     title: 'Escolher wallpaper do fundo das conversas',
@@ -91,6 +168,7 @@ function chooseWallpaper() {
 
 // ---------- Menu de personalização (Ctrl+Alt+M ou botão direito no botão ☰) ----------
 function popupMenu() {
+  const zoomCurrent = getZoomLabel();
   const template = [
     {
       label: 'Transparência',
@@ -99,6 +177,34 @@ function popupMenu() {
         type: 'radio',
         checked: Math.abs(v - settings.opacity) < 0.01,
         click: () => setOpacity(v),
+      })),
+    },
+    {
+      label: `Zoom da página (${zoomCurrent})`,
+      submenu: [
+        { label: 'Aumentar', accelerator: 'CmdOrCtrl+=', click: () => zoomIn() },
+        { label: 'Diminuir', accelerator: 'CmdOrCtrl+-', click: () => zoomOut() },
+        { label: 'Restaurar 100%', accelerator: 'CmdOrCtrl+0', click: () => resetZoom() },
+        { type: 'separator' },
+        { label: '90%', click: () => setZoomLevel(-1) },
+        { label: '100%', click: () => setZoomLevel(0) },
+        { label: '110%', click: () => setZoomLevel(1) },
+        { label: '125%', click: () => setZoomLevel(2) },
+      ],
+    },
+    {
+      label: 'Tema neon',
+      type: 'checkbox',
+      checked: settings.neonMode,
+      click: (item) => setNeonMode(item.checked),
+    },
+    {
+      label: 'Tamanho da janela',
+      submenu: Object.entries(WINDOW_PRESETS).map(([presetName, preset]) => ({
+        label: preset.label,
+        type: 'radio',
+        checked: settings.windowPreset === presetName,
+        click: () => applyWindowPreset(presetName),
       })),
     },
     {
@@ -147,22 +253,26 @@ function createWindow() {
 
   win = new BrowserWindow({
     ...settings.bounds,
-    minWidth: 280,
-    minHeight: 400,
-    title: 'WhatsApp',
+    minWidth: 340,
+    minHeight: 520,
+    title: 'WhatsApp Eletron',
     backgroundColor: '#111b21',
     autoHideMenuBar: true,
+    show: true,
     webPreferences: {
       partition: 'persist:whatsapp', // mantém o login salvo
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      disableBlinkFeatures: 'Auxclick',
     },
   });
 
   Menu.setApplicationMenu(null);
   win.setOpacity(settings.opacity);
+  applyZoom();
+  updateZoomBadge();
   win.setVisibleOnAllWorkspaces(settings.desktopPinned);
   win.setSkipTaskbar(settings.desktopPinned);
   win.setAlwaysOnTop(settings.desktopPinned ? false : settings.alwaysOnTop);
@@ -172,6 +282,7 @@ function createWindow() {
   const saveBounds = () => {
     if (win.isMinimized() || win.isMaximized()) return;
     settings.bounds = win.getBounds();
+    applyZoom();
     saveSettings();
   };
   win.on('resized', saveBounds);
@@ -185,6 +296,7 @@ function createWindow() {
       await win.webContents.executeJavaScript(`window.__waLayout.setSidebar(${settings.sidebarHidden})`);
       await win.webContents.executeJavaScript(`window.__waLayout.setNav(${settings.navHidden})`);
       await win.webContents.executeJavaScript(`window.__waWallpaper && window.__waWallpaper.set(${JSON.stringify(settings.wallpaper || '')})`);
+      await win.webContents.executeJavaScript(`window.__waTheme && window.__waTheme.setNeon(${settings.neonMode})`);
     } catch (e) {
       console.error('Erro ao injetar inject.js:', e);
     }
@@ -192,14 +304,29 @@ function createWindow() {
 
   // Atalhos (só funcionam com a janela em foco)
   win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'mouseWheel') {
+      if (input.control && !input.alt && !input.meta && !input.shift) {
+        event.preventDefault();
+        if (input.deltaY < 0) zoomIn(); else zoomOut();
+      }
+      else if (input.alt && !input.control && !input.meta && !input.shift) {
+        event.preventDefault();
+        adjustOpacityByWheel(input.deltaY);
+      }
+      return;
+    }
     if (input.type !== 'keyDown') return;
     const key = input.key.toLowerCase();
+    const ctrlOnly = input.control && !input.alt && !input.shift && !input.meta;
     const ctrlAlt = input.control && input.alt && !input.shift && !input.meta;
     const altOnly = input.alt && !input.control && !input.shift && !input.meta;
 
     if (ctrlAlt && key === 't') { event.preventDefault(); cycleOpacity(); }
     else if (ctrlAlt && key === 'a') { event.preventDefault(); setAlwaysOnTop(!settings.alwaysOnTop); }
     else if (ctrlAlt && key === 'm') { event.preventDefault(); popupMenu(); }
+    else if (ctrlOnly && (key === '=' || key === '+' || input.code === 'NumpadAdd')) { event.preventDefault(); zoomIn(); }
+    else if (ctrlOnly && (key === '-' || input.code === 'NumpadSubtract')) { event.preventDefault(); zoomOut(); }
+    else if (ctrlOnly && key === '0') { event.preventDefault(); resetZoom(); }
     else if (altOnly && key === 'b') { event.preventDefault(); setSidebar(!settings.sidebarHidden); }
     else if (altOnly && key === 'n') { event.preventDefault(); setNav(!settings.navHidden); }
   });
@@ -234,6 +361,10 @@ ipcMain.on('nav-changed', (event, hidden) => {
   settings.navHidden = !!hidden;
   saveSettings();
 });
+ipcMain.on('zoom-in', () => { if (win) zoomIn(); });
+ipcMain.on('zoom-out', () => { if (win) zoomOut(); });
+ipcMain.on('zoom-reset', () => { if (win) resetZoom(); });
+ipcMain.on('window-preset', (_, preset) => { if (win) applyWindowPreset(preset); });
 ipcMain.handle('choose-wallpaper', () => {
   try {
     const result = dialog.showOpenDialogSync({
